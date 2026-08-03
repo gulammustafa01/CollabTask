@@ -1,0 +1,28 @@
+# Dependency directories
+backend/node_modules/
+frontend/node_modules/
+
+# Production build output
+frontend/dist/
+
+# Environment files
+.env
+backend/.env
+frontend/.env
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Vite cache
+node_modules/.vite/
+
+# Optional editor folders
+.vscode/
+.idea/
