@@ -1,49 +1,55 @@
 # CollabTask — Real-Time Collaborative Task Board
 
-Trello/Linear jaisa hi, lekin **real-time multiplayer** + **role-based permissions** + **AI-powered priority suggestions** ke saath. MERN stack pe bana hai (jaise SkyArc), plus Socket.io real-time layer.
+A Trello/Linear-style task board with **real-time multiplayer sync**, **role-based permissions**, and **AI-powered priority suggestions**. Built on the MERN stack with a Socket.io real-time layer.
 
-## Kya-kya hai isme
+## Features
 
-- **Multi-user boards with drag-drop** — `@hello-pangea/dnd` (maintained react-beautiful-dnd fork) se smooth drag-and-drop, cards ek list se doosri list me move ho sakte hain.
-- **Real-time sync via Socket.io** — jab ek user card move kare, doosre saare connected users ko turant (bina refresh ke) dikh jaata hai. Live presence avatars, aur "so-and-so is moving this card" indicator bhi hai.
-- **Role-based permissions (RBAC)** — har board pe teen roles: `owner`, `editor`, `viewer`. Backend middleware (`middleware/rbac.js`) har route pe role check karta hai — sirf UI-level restriction nahi, actual server-side enforcement.
-- **Activity log** — har action (card create/move/delete, member add, role change, comments) ek `ActivityLog` collection me store hota hai aur sidebar me real-time update hota hai.
-- **Card comments** — har card pe threaded comments, real-time sync (`comment:new`/`comment:deleted` socket events), sirf apna comment delete kar sakte ho (ya owner kisi ka bhi).
-- **Due date reminders** — cards pe due date set karo, visual badges automatically dikhte hain: "Overdue" (red), "Due today" (amber), "Due tomorrow"/"Due <date>" (muted) — client-side computed, koi extra cron job nahi chahiye.
-- **Drag-drop list reorder** — sirf cards hi nahi, poori lists (columns) bhi drag karke reorder kar sakte ho — real-time sab connected users ko sync hota hai.
-- **Dark/light theme toggle** — CSS-variable based theming, localStorage me persist hoti hai, system preference (`prefers-color-scheme`) bhi respect karta hai, aur flash-of-unstyled-content avoid karne ke liye theme paint se pehle hi set ho jaati hai.
-- **Fully responsive** — mobile pe board panel (Members/Activity/AI Summary) ek slide-over drawer ban jaata hai, header wrap karta hai, boards horizontally scroll karte hain (jaise Trello mobile app).
+- **Multi-user boards with drag-and-drop** — powered by `@hello-pangea/dnd` (a maintained fork of react-beautiful-dnd). Cards can be dragged between lists, and lists themselves can be reordered.
+- **Real-time sync via Socket.io** — when one user moves a card, every other connected user sees it update instantly, with no refresh needed. Includes live presence avatars and a "so-and-so is moving this card" indicator.
+- **Role-based permissions (RBAC)** — three roles per board: `owner`, `editor`, `viewer`. Enforced by backend middleware (`middleware/rbac.js`) on every route — this is real server-side enforcement, not just a UI-level restriction.
+- **Activity log** — every action (card created/moved/deleted, member added, role changed, comment added) is stored in an `ActivityLog` collection and streamed live to the sidebar.
+- **Card comments** — threaded comments on each card, synced in real time (`comment:new` / `comment:deleted` socket events). Users can delete their own comments; owners can delete any comment.
+- **Due date reminders** — set a due date on any card and get automatic visual badges: "Overdue" (red), "Due today" (amber), "Due tomorrow" / "Due <date>" (muted) — computed client-side, no extra cron infrastructure needed.
+- **Drag-and-drop list reordering** — not just cards; entire columns (lists) can be dragged to reorder, synced live to all connected users.
+- **Dark/light theme toggle** — CSS-variable-based theming, persisted in `localStorage`, respects system preference (`prefers-color-scheme`), and applies before first paint to avoid a flash of unstyled content.
+- **Fully responsive** — on mobile, the side panel (Members/Activity/AI Summary) becomes a slide-over drawer, the header wraps gracefully, and boards scroll horizontally (similar to the Trello mobile app).
 - **AI features (Groq API)**:
-  - ✨ **Auto-suggest priority** — card ka title/description dekhkar AI batata hai priority kya honi chahiye (low/medium/high/urgent) + ek chhoti si reason.
-  - ✨ **AI sprint summary** — poore board ka snapshot leke ek concise stand-up-style summary generate karta hai (progress, urgent items, suggestion).
+  - ✨ **Auto-suggest priority** — the AI reads a card's title/description and suggests a priority (low/medium/high/urgent) with a short reason.
+  - ✨ **AI sprint summary** — generates a concise stand-up-style summary of the whole board (progress, urgent items, a suggestion for the team).
 
 ## Architecture
 
 ```
 collabtask/
 ├── backend/           Express + Socket.io + MongoDB
-│   ├── models/         User, Board, List, Card, ActivityLog (Mongoose schemas)
+│   ├── models/         User, Board, List, Card, Comment, ActivityLog (Mongoose schemas)
 │   ├── middleware/      auth.js (JWT), rbac.js (role enforcement)
-│   ├── routes/          auth, boards (lists/cards/members/activity nested), ai
-│   ├── socket/           socketHandler.js — JWT-authenticated socket connections, board rooms, presence tracking
-│   └── utils/groq.js     Groq SDK wrapper for priority suggestion + sprint summary
+│   ├── routes/           auth, boards (lists/cards/members/comments/activity nested), ai
+│   ├── socket/            socketHandler.js — JWT-authenticated socket connections, board rooms, presence tracking
+│   └── utils/groq.js      Groq SDK wrapper for priority suggestion + sprint summary
 └── frontend/          React 18 + Vite + Tailwind
-    ├── context/AuthContext.jsx    JWT-based auth state
-    ├── hooks/useSocket.js          per-board socket connection lifecycle
-    ├── pages/                       Login, Register, Dashboard, BoardView
-    └── components/                  ListColumn, CardItem, CardModal, ActivityFeed, MembersPanel, SprintSummaryPanel
+    ├── context/AuthContext.jsx, ThemeContext.jsx    Auth state, dark/light theme state
+    ├── hooks/useSocket.js                             Per-board socket connection lifecycle
+    ├── pages/                                          Login, Register, Dashboard, BoardView
+    └── components/                                     ListColumn, CardItem, CardModal, ActivityFeed, MembersPanel, SprintSummaryPanel, ThemeToggle
 ```
 
 ### Real-time flow (core differentiator)
 
-1. Frontend `useSocket` hook JWT token ke saath socket connect karta hai aur `board:join` emit karta hai.
-2. Backend socket middleware token verify karta hai, user ko `board:<id>` room me join karata hai, presence Map update karta hai.
-3. Jab koi card move/create/update/delete karta hai — REST API call hoti hai (persistence ke liye), aur wahi route handler `io.to(room).emit(...)` se sab connected clients ko event bhejta hai.
-5. Frontend optimistically UI update karta hai (drag ke turant baad) aur agar API fail ho jaaye to `loadBoard()` se rollback kar deta hai.
+1. The frontend's `useSocket` hook connects a socket using the user's JWT and emits `board:join`.
+2. The backend socket middleware verifies the token, joins the user to a `board:<id>` room, and updates an in-memory presence map.
+3. When a user creates/moves/updates/deletes a card (or list) — a REST API call persists the change, and that same route handler does `io.to(room).emit(...)` to broadcast the event to every connected client on that board.
+4. The frontend updates the UI optimistically right after a drag, and rolls back via `loadBoard()` if the API call fails.
 
 ### RBAC enforcement
 
-`requireBoardRole(minRole)` middleware role hierarchy check karta hai (`viewer < editor < owner`) — matlab `owner`-only routes (member invite, role change) sirf owner access kar sakta hai, aur `viewer` role wale sirf read kar sakte hain, kabhi bhi card/list create/edit nahi kar sakte — chahe frontend bypass kiya jaaye, backend hamesha reject karega.
+`requireBoardRole(minRole)` middleware checks a role hierarchy (`viewer < editor < owner`) — so owner-only routes (member invite, role change) are only reachable by owners, and viewers can never create/edit cards or lists — even if the frontend were bypassed, the backend always rejects it.
+
+### Design system
+
+- **Typography**: Sora for headings, Inter for body text, IBM Plex Mono for metadata (timestamps, priority labels, dates) — giving the interface a "system console" feel appropriate for a developer tool.
+- **Signature element**: priority is signaled with a colored left rail on each card (like a physical index-card tab) — green (low), blue (medium), amber (high), red (urgent) — used consistently across the app instead of just a text badge.
+- **Theming**: all colors are CSS custom properties (`--color-*`), swapped by a `data-theme` attribute on `<html>`, so light/dark mode requires no component-level conditional logic.
 
 ## Setup (local development)
 
@@ -52,12 +58,12 @@ collabtask/
 ```bash
 cd backend
 cp .env.example .env
-# .env me apna MONGO_URI, JWT_SECRET, aur GROQ_API_KEY daalo
+# fill in MONGO_URI, JWT_SECRET, and GROQ_API_KEY in .env
 npm install
 npm run dev
 ```
 
-Groq API key yahan se free milti hai: https://console.groq.com/keys
+Get a free Groq API key at: https://console.groq.com/keys
 
 ### 2. Frontend
 
@@ -68,18 +74,18 @@ npm install
 npm run dev
 ```
 
-Frontend `http://localhost:5173` pe chalega, backend `http://localhost:5000` pe.
+The frontend runs on `http://localhost:5173`, the backend on `http://localhost:5000`.
 
-### 3. Try karna real-time feature
+### 3. Trying out the real-time features
 
-Do alag browser windows/tabs kholo (ya ek normal + ek incognito), dono me alag accounts se login karo, ek hi board pe dono ko invite karo (owner wale account se `Members` tab se email daal ke invite karo), aur ek window me card drag karo — doosri window me turant move hote dekhoge.
+Open two browser windows/tabs (e.g. one normal, one incognito), log in with two different accounts, invite the second account to a board from the **Members** tab (as the owner), and drag a card in one window — you'll see it move instantly in the other.
 
 ## Deployment notes
 
-- Backend: Render/Railway pe deploy karo (Socket.io ke liye websocket support chahiye — Vercel serverless functions pe long-lived socket connections kaam nahi karte).
-- Frontend: Vercel pe deploy karo, jaise tumhara portfolio — `VITE_API_URL` aur `VITE_SOCKET_URL` ko production backend URL pe point karo.
-- MongoDB: MongoDB Atlas free tier use kar sakte ho.
-- **Security**: `.env` kabhi commit mat karna. Production me `JWT_SECRET` strong random string rakho, aur CORS `CLIENT_URL` ko apne actual frontend domain pe set karo.
+- **Backend**: deploy to Render or Railway — Socket.io needs WebSocket support, so serverless platforms like Vercel functions (which are stateless, short-lived) won't work for the backend.
+- **Frontend**: deploy to Vercel, and point `VITE_API_URL` / `VITE_SOCKET_URL` at your production backend URL.
+- **MongoDB**: MongoDB Atlas free tier works well.
+- **Security**: never commit `.env`. Use a strong random `JWT_SECRET` in production, and set `CORS`'s `CLIENT_URL` to your actual frontend domain.
 
 ## Resume bullet (ready to use)
 
