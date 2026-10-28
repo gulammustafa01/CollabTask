@@ -1,4 +1,4 @@
-# CollabTask — Real-Time Collaborative Task Board
+# CollabTask — Real-Time Collaborative Task Board.
 
 A Trello/Linear-style task board with **real-time multiplayer sync**, **role-based permissions**, and **AI-powered priority suggestions**. Built on the MERN stack with a Socket.io real-time layer.
 
